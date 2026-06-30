@@ -1,0 +1,6 @@
+.env
+__pycache__/
+*.pyc
+temp_upload.pdf
+expense_log.csv
+budgets.json
