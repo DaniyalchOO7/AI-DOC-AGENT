@@ -1,0 +1,192 @@
+# 🧾 Document-to-Action Agent
+
+An AI agent that reads receipts and invoices, autonomously reasons about them using **Gemini 2.0 function calling**, and takes real actions — not just answering questions about the document.
+
+> Upload a PDF → Agent extracts data → Checks budget → Logs the entry → Sends alert if over budget → Gives a context-aware summary with your full spending history
+
+![Python](https://img.shields.io/badge/Python-3.10+-blue?style=flat&logo=python)
+![Streamlit](https://img.shields.io/badge/Streamlit-UI-red?style=flat&logo=streamlit)
+![Gemini](https://img.shields.io/badge/Gemini-2.0%20Flash-orange?style=flat&logo=google)
+![License](https://img.shields.io/badge/License-MIT-green?style=flat)
+
+---
+
+## 🎥 Demo
+
+> *(Upload a demo.gif here after recording — see Weekend 2 steps)*
+
+---
+
+## 🤔 What makes this different from "chat with your PDF"?
+
+Most AI document tools just answer questions. This one **takes actions**:
+
+| Feature | Chat with PDF tools | This agent |
+|---|---|---|
+| Reads document content | ✅ | ✅ |
+| Extracts structured fields | ❌ | ✅ |
+| Checks against a budget | ❌ | ✅ |
+| Logs entry to a database | ❌ | ✅ |
+| Sends real alerts | ❌ | ✅ |
+| Remembers spending history | ❌ | ✅ |
+| Shows reasoning trace | ❌ | ✅ |
+| Handles scanned PDFs (OCR) | ❌ | ✅ |
+
+The agent uses **Gemini function calling** to decide which tools to use and in what order — it is not a hardcoded if/else chain. Every decision is visible in the live reasoning trace.
+
+---
+
+## 🏗️ Architecture
+
+```
+document-action-agent/
+│
+├── app.py            →  Streamlit UI (browser interface + file upload)
+├── agent.py          →  Gemini function-calling loop + reasoning trace
+├── extraction.py     →  PDF text extraction with OCR fallback
+├── tools.py          →  4 tools the agent can call:
+│                           • check_against_budget
+│                           • log_entry
+│                           • send_alert
+│                           • get_spending_summary
+├── main.py           →  CLI entry point (alternative to UI)
+│
+├── requirements.txt
+├── .env.example      →  API key template
+├── budgets.json      →  Auto-generated on first run, editable in UI
+└── expense_log.csv   →  Auto-generated, running log of all documents
+```
+
+### How the agent loop works
+
+```
+User uploads PDF
+      ↓
+extraction.py → pdfplumber (fast path)
+              → pytesseract OCR (fallback for scanned PDFs)
+      ↓
+agent.py sends extracted text + available tools to Gemini 2.0 Flash
+      ↓
+Gemini reasons and calls tools in sequence:
+  1. get_spending_summary()    → pulls full spending history
+  2. check_against_budget()    → compares amount vs limit
+  3. log_entry()               → writes to expense_log.csv
+  4. send_alert()              → Slack webhook or console (if over budget)
+      ↓
+Gemini returns context-aware plain-English summary
+      ↓
+Streamlit UI displays: reasoning trace + summary + updated charts
+```
+
+---
+
+## ⚡ Quickstart
+
+### 1. Clone the repo
+```bash
+git clone https://github.com/DaniyalchOO7/document-action-agent.git
+cd document-action-agent
+```
+
+### 2. Install dependencies
+```bash
+pip install -r requirements.txt
+```
+
+### 3. Set up your API key
+```bash
+cp .env.example .env
+```
+Open `.env` and add your Gemini API key:
+```
+GEMINI_API_KEY=your_key_here
+```
+Get a free key at [aistudio.google.com](https://aistudio.google.com)
+
+### 4. Run the Streamlit app
+```bash
+streamlit run app.py
+```
+
+Or via command line:
+```bash
+python main.py path/to/receipt.pdf
+```
+
+---
+
+## 🔧 Configuration
+
+### Budget limits
+Budget limits are editable directly in the Streamlit UI — no code changes needed. Defaults on first run:
+
+| Category | Default Limit |
+|---|---|
+| Food | $300 |
+| Travel | $500 |
+| Office Supplies | $150 |
+| Software | $200 |
+| Other | $100 |
+
+### Slack alerts (optional)
+To receive real Slack notifications when an expense is over budget, add your webhook URL to `.env`:
+```
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/your/webhook/url
+```
+Without this, alerts print to the console. The app works fully either way.
+
+---
+
+## 🧠 Example agent output
+
+**Input:** Receipt from Staples — $187.42 for office supplies
+
+**Reasoning trace:**
+```
+→ Called: get_spending_summary
+  Result: {office_supplies: {spent: 120.00, limit: 150, remaining: 30.00, percent_used: 80.0}}
+
+→ Called: check_against_budget
+  Args: {category: office_supplies, amount: 187.42}
+  Result: {over_budget: True, overage_amount: 37.42}
+
+→ Called: log_entry
+  Args: {vendor: Staples, category: office_supplies, amount: 187.42, status: over_budget}
+  Result: {logged: True}
+
+→ Called: send_alert
+  Args: {message: Staples receipt of $187.42 exceeds office supplies budget by $37.42}
+  Result: {sent: True, channel: console}
+```
+
+**Summary:**
+> Processed a Staples receipt for $187.42 (office supplies) dated June 14, 2024. This exceeds your $150 office supplies budget by $37.42. Note: you were already at 80% of this budget before this purchase — you have now spent $307.42 against a $150 limit this month. Alert sent.
+
+---
+
+## 🛠️ Tech stack
+
+- **Python 3.10+**
+- **[Gemini 2.0 Flash](https://ai.google.dev/)** — function calling + reasoning
+- **[Streamlit](https://streamlit.io/)** — browser UI
+- **[pdfplumber](https://github.com/jsvine/pdfplumber)** — PDF text extraction
+- **[pytesseract](https://github.com/madmaze/pytesseract)** — OCR for scanned PDFs
+- **[google-genai](https://github.com/googleapis/python-genai)** — official Gemini SDK
+
+---
+
+## 🚀 Roadmap
+
+- [ ] Support for multiple document types (CSV, images, XLSX)
+- [ ] Monthly budget reset with historical reporting
+- [ ] Email notification support alongside Slack
+- [ ] Fine-tuned category classification model
+- [ ] Multi-user support with authentication
+
+---
+
+## 👤 Author
+
+**Daniyal Munir**
+B.S. Computer Science (AI Concentration) — UMass Dartmouth
+
